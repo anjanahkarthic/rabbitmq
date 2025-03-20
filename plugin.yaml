@@ -1,24 +1,23 @@
 ---
-- name: Setup RabbitMQ Web Dashboard with Admin User and OpenSSL Password
+- name: Enable RabbitMQ Web Dashboard and Create Admin User with OpenSSL Password
   hosts: localhost
   become: true
   connection: local
+
   vars:
     rabbitmq_user: "admin"
     rabbitmq_vhost: "/"
-    password_file: "/tmp/rabbitmq_admin_password.txt"
+    password_file: "/tmp/rabbitmq_admin_credentials.txt"
 
   tasks:
-    - name: Install required packages (RabbitMQ plugins & OpenSSL)
+    - name: Install OpenSSL
       apt:
-        name: "{{ item }}"
+        name: openssl
         state: present
         update_cache: true
-      loop:
-        - openssl
 
-    - name: Generate secure RabbitMQ admin password using OpenSSL
-      command: "openssl rand -base64 16"
+    - name: Generate secure password using OpenSSL
+      command: openssl rand -base64 16
       register: generated_password
 
     - name: Save RabbitMQ admin credentials to a file
@@ -33,22 +32,35 @@
 
     - name: Enable RabbitMQ Management Plugin
       command: rabbitmq-plugins enable rabbitmq_management
-      register: plugin_output
-      changed_when: "'The following plugins have been enabled' in plugin_output.stdout or 'Plugin configuration unchanged' in plugin_output.stdout"
+      register: plugin_enable
+      changed_when: "'enabled' in plugin_enable.stdout or 'already enabled' in plugin_enable.stdout"
 
-    - name: Check if RabbitMQ admin user already exists
+    - name: Check RabbitMQ status
+      command: rabbitmqctl status
+      register: rabbitmq_status
+      ignore_errors: true
+
+    - name: List existing RabbitMQ users
       command: rabbitmqctl list_users
       register: existing_users
 
-    - name: Set permissions for RabbitMQ admin user
+    - name: Create RabbitMQ admin user if not exists
+      command: "rabbitmqctl add_user {{ rabbitmq_user }} '{{ generated_password.stdout }}'"
+      when: existing_users.stdout_lines | select('search', '^' ~ rabbitmq_user ~ '\\b') | list | length == 0
+
+    - name: Set permissions for admin user
       command: "rabbitmqctl set_permissions -p {{ rabbitmq_vhost }} {{ rabbitmq_user }} '.*' '.*' '.*'"
 
-    - name: Set administrator tag for admin user
+    - name: Set administrator tag to admin user
       command: "rabbitmqctl set_user_tags {{ rabbitmq_user }} administrator"
 
-    - name: Check final user list
+    - name: List RabbitMQ users after creation
       command: rabbitmqctl list_users
 
-    - name: Show RabbitMQ Management UI info
+    - name: Show final output
       debug:
-        msg: "RabbitMQ Management Dashboard: http://<server-ip>:15672 (Username: {{ rabbitmq_user }}, Password is in {{ password_file }})"
+        msg: |
+          ✅ RabbitMQ setup complete.
+          🖥 Web Dashboard URL: http://<your-server-ip>:15672
+          👤 Username: {{ rabbitmq_user }}
+          🔐 Password saved in: {{ password_file }}
