@@ -1,0 +1,42 @@
+---
+- name: Install OpenSSL and create RabbitMQ user with secure password
+  hosts: all
+  become: true
+  vars:
+    rabbitmq_user: "myuser"
+    password_file: "/tmp/rabbitmq_password.txt"
+
+  tasks:
+    - name: Install OpenSSL
+      apt:
+        name: openssl
+        state: present
+        update_cache: true
+
+    - name: Generate secure password using OpenSSL
+      command: "openssl rand -base64 20"
+      register: generated_password
+
+    - name: Save password to file
+      copy:
+        content: |
+          Username: {{ rabbitmq_user }}
+          Password: {{ generated_password.stdout }}
+        dest: "{{ password_file }}"
+        mode: '0600'
+
+    - name: Create RabbitMQ user
+      command: "rabbitmqctl add_user {{ rabbitmq_user }} '{{ generated_password.stdout }}'"
+      args:
+        creates: "/var/lib/rabbitmq/.rabbitmq_user_{{ rabbitmq_user }}"
+
+    - name: Set permissions for RabbitMQ user
+      command: "rabbitmqctl set_permissions -p / {{ rabbitmq_user }} '.*' '.*' '.*'"
+
+    - name: Set user tags (administrator)
+      command: "rabbitmqctl set_user_tags {{ rabbitmq_user }} administrator"
+
+    - name: Mark user creation done (to avoid duplicate execution)
+      file:
+        path: "/var/lib/rabbitmq/.rabbitmq_user_{{ rabbitmq_user }}"
+        state: touch
