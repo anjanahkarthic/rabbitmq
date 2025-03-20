@@ -1,0 +1,89 @@
+---
+- name: Install RabbitMQ and Erlang on Ubuntu
+  hosts: all
+  become: true
+  tasks:
+    - name: Install prerequisites
+      apt:
+        name:
+          - curl
+          - gnupg
+          - apt-transport-https
+        state: present
+        update_cache: true
+
+    - name: Add RabbitMQ signing key
+      ansible.builtin.get_url:
+        url: "https://keys.openpgp.org/vks/v1/by-fingerprint/0A9AF2115F4687BD29803A206B73A36E6026DFCA"
+        dest: /usr/share/keyrings/com.rabbitmq.team.gpg.key
+        mode: '0644'
+
+    - name: Add Erlang GPG key
+      ansible.builtin.get_url:
+        url: "https://github.com/rabbitmq/signing-keys/releases/download/3.0/cloudsmith.rabbitmq-erlang.E495BB49CC4BBE5B.key"
+        dest: /usr/share/keyrings/rabbitmq-erlang.gpg.key
+        mode: '0644'
+
+    - name: Add RabbitMQ GPG key
+      ansible.builtin.get_url:
+        url: "https://github.com/rabbitmq/signing-keys/releases/download/3.0/cloudsmith.rabbitmq-server.9F4587F226208342.key"
+        dest: /usr/share/keyrings/rabbitmq-server.gpg.key
+        mode: '0644'
+
+    - name: Convert keys to GPG format (dearmor)
+      shell: |
+        gpg --dearmor < {{ item.src }} > {{ item.dest }}
+      args:
+        creates: "{{ item.dest }}"
+      loop:
+        - { src: /usr/share/keyrings/com.rabbitmq.team.gpg.key, dest: /usr/share/keyrings/com.rabbitmq.team.gpg }
+        - { src: /usr/share/keyrings/rabbitmq-erlang.gpg.key, dest: /usr/share/keyrings/rabbitmq.E495BB49CC4BBE5B.gpg }
+        - { src: /usr/share/keyrings/rabbitmq-server.gpg.key, dest: /usr/share/keyrings/rabbitmq.9F4587F226208342.gpg }
+
+    - name: Add RabbitMQ APT repository
+      copy:
+        dest: /etc/apt/sources.list.d/rabbitmq.list
+        content: |
+          ## Erlang repository
+          deb [arch=amd64 signed-by=/usr/share/keyrings/rabbitmq.E495BB49CC4BBE5B.gpg] https://ppa1.rabbitmq.com/rabbitmq/rabbitmq-erlang/deb/ubuntu focal main
+          deb-src [signed-by=/usr/share/keyrings/rabbitmq.E495BB49CC4BBE5B.gpg] https://ppa1.rabbitmq.com/rabbitmq/rabbitmq-erlang/deb/ubuntu focal main
+          deb [arch=amd64 signed-by=/usr/share/keyrings/rabbitmq.E495BB49CC4BBE5B.gpg] https://ppa2.rabbitmq.com/rabbitmq/rabbitmq-erlang/deb/ubuntu focal main
+          deb-src [signed-by=/usr/share/keyrings/rabbitmq.E495BB49CC4BBE5B.gpg] https://ppa2.rabbitmq.com/rabbitmq/rabbitmq-erlang/deb/ubuntu focal main
+
+          ## RabbitMQ repository
+          deb [arch=amd64 signed-by=/usr/share/keyrings/rabbitmq.9F4587F226208342.gpg] https://ppa1.rabbitmq.com/rabbitmq/rabbitmq-server/deb/ubuntu focal main
+          deb-src [signed-by=/usr/share/keyrings/rabbitmq.9F4587F226208342.gpg] https://ppa1.rabbitmq.com/rabbitmq/rabbitmq-server/deb/ubuntu focal main
+          deb [arch=amd64 signed-by=/usr/share/keyrings/rabbitmq.9F4587F226208342.gpg] https://ppa2.rabbitmq.com/rabbitmq/rabbitmq-server/deb/ubuntu focal main
+          deb-src [signed-by=/usr/share/keyrings/rabbitmq.9F4587F226208342.gpg] https://ppa2.rabbitmq.com/rabbitmq/rabbitmq-server/deb/ubuntu focal main
+
+    - name: Update apt cache
+      apt:
+        update_cache: true
+
+    - name: Install Erlang packages
+      apt:
+        name:
+          - erlang-base
+          - erlang-asn1
+          - erlang-crypto
+          - erlang-eldap
+          - erlang-ftp
+          - erlang-inets
+          - erlang-mnesia
+          - erlang-os-mon
+          - erlang-parsetools
+          - erlang-public-key
+          - erlang-runtime-tools
+          - erlang-snmp
+          - erlang-ssl
+          - erlang-syntax-tools
+          - erlang-tftp
+          - erlang-tools
+          - erlang-xmerl
+        state: present
+
+    - name: Install RabbitMQ Server
+      apt:
+        name: rabbitmq-server
+        state: present
+        force: yes
