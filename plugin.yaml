@@ -1,0 +1,58 @@
+---
+- name: Setup RabbitMQ Web Dashboard with Admin User and OpenSSL Password
+  hosts: localhost
+  become: true
+  connection: local
+  vars:
+    rabbitmq_user: "admin"
+    rabbitmq_vhost: "/"
+    password_file: "/tmp/rabbitmq_admin_password.txt"
+
+  tasks:
+    - name: Install required packages (RabbitMQ plugins & OpenSSL)
+      apt:
+        name: "{{ item }}"
+        state: present
+        update_cache: true
+      loop:
+        - openssl
+
+    - name: Generate secure RabbitMQ admin password using OpenSSL
+      command: "openssl rand -base64 16"
+      register: generated_password
+
+    - name: Save RabbitMQ admin credentials to a file
+      copy:
+        dest: "{{ password_file }}"
+        mode: '0600'
+        content: |
+          RabbitMQ Admin Credentials
+          ==========================
+          Username: {{ rabbitmq_user }}
+          Password: {{ generated_password.stdout }}
+
+    - name: Enable RabbitMQ Management Plugin
+      command: rabbitmq-plugins enable rabbitmq_management
+      register: plugin_output
+      changed_when: "'The following plugins have been enabled' in plugin_output.stdout or 'Plugin configuration unchanged' in plugin_output.stdout"
+
+    - name: Check if RabbitMQ admin user already exists
+      command: rabbitmqctl list_users
+      register: existing_users
+
+    - name: Create RabbitMQ admin user if not exists
+      command: "rabbitmqctl add_user {{ rabbitmq_user }} '{{ generated_password.stdout }}'"
+      when: "'{{ rabbitmq_user }}' not in existing_users.stdout"
+
+    - name: Set permissions for RabbitMQ admin user
+      command: "rabbitmqctl set_permissions -p {{ rabbitmq_vhost }} {{ rabbitmq_user }} '.*' '.*' '.*'"
+
+    - name: Set administrator tag for admin user
+      command: "rabbitmqctl set_user_tags {{ rabbitmq_user }} administrator"
+
+    - name: Check final user list
+      command: rabbitmqctl list_users
+
+    - name: Show RabbitMQ Management UI info
+      debug:
+        msg: "RabbitMQ Management Dashboard: http://<server-ip>:15672 (Username: {{ rabbitmq_user }}, Password is in {{ password_file }})"
