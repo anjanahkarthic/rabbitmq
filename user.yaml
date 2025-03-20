@@ -1,6 +1,6 @@
 ---
 - name: Install OpenSSL and create RabbitMQ user with secure password
-  hosts: all
+  hosts: localhost
   become: true
   vars:
     rabbitmq_user: "myuser"
