@@ -40,10 +40,6 @@
       command: rabbitmqctl list_users
       register: existing_users
 
-    - name: Create RabbitMQ admin user if not exists
-      command: "rabbitmqctl add_user {{ rabbitmq_user }} '{{ generated_password.stdout }}'"
-      when: "'{{ rabbitmq_user }}' not in existing_users.stdout"
-
     - name: Set permissions for RabbitMQ admin user
       command: "rabbitmqctl set_permissions -p {{ rabbitmq_vhost }} {{ rabbitmq_user }} '.*' '.*' '.*'"
 
