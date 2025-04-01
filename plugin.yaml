@@ -10,15 +10,29 @@
     password_file: "/tmp/rabbitmq_admin_credentials.txt"
 
   tasks:
-    - name: Install OpenSSL
+    - name: Install OpenSSL and RabbitMQ Management Plugin
       apt:
-        name: openssl
+        name:
+          - openssl
+          - rabbitmq-server
         state: present
         update_cache: true
 
+    - name: Ensure RabbitMQ service is running
+      systemd:
+        name: rabbitmq-server
+        state: started
+        enabled: true
+
+    - name: Enable RabbitMQ Management Plugin
+      command: rabbitmq-plugins enable rabbitmq_management
+      register: plugin_enable
+      changed_when: "'enabled' in plugin_enable.stdout or 'already enabled' in plugin_enable.stdout"
+
     - name: Generate secure password using OpenSSL
-      command: openssl rand -base64 16
+      shell: openssl rand -base64 16
       register: generated_password
+      changed_when: false
 
     - name: Save RabbitMQ admin credentials to a file
       copy:
@@ -30,32 +44,25 @@
           Username: {{ rabbitmq_user }}
           Password: {{ generated_password.stdout }}
 
-    - name: Enable RabbitMQ Management Plugin
-      command: rabbitmq-plugins enable rabbitmq_management
-      register: plugin_enable
-      changed_when: "'enabled' in plugin_enable.stdout or 'already enabled' in plugin_enable.stdout"
-
-    - name: Check RabbitMQ status
-      command: rabbitmqctl status
-      register: rabbitmq_status
-      ignore_errors: true
-
-    - name: List existing RabbitMQ users
+    - name: Check if RabbitMQ admin user already exists
       command: rabbitmqctl list_users
       register: existing_users
+      changed_when: false
 
     - name: Create RabbitMQ admin user if not exists
-      command: "rabbitmqctl add_user {{ rabbitmq_user }} '{{ generated_password.stdout }}'"
+      command: rabbitmqctl add_user {{ rabbitmq_user }} {{ generated_password.stdout }}
       when: existing_users.stdout_lines | select('search', '^' ~ rabbitmq_user ~ '\\b') | list | length == 0
 
     - name: Set permissions for admin user
-      command: "rabbitmqctl set_permissions -p {{ rabbitmq_vhost }} {{ rabbitmq_user }} '.*' '.*' '.*'"
+      command: rabbitmqctl set_permissions -p {{ rabbitmq_vhost }} {{ rabbitmq_user }} ".*" ".*" ".*"
 
     - name: Set administrator tag to admin user
-      command: "rabbitmqctl set_user_tags {{ rabbitmq_user }} administrator"
+      command: rabbitmqctl set_user_tags {{ rabbitmq_user }} administrator
 
-    - name: List RabbitMQ users after creation
-      command: rabbitmqctl list_users
+    - name: Restart RabbitMQ service to apply changes
+      systemd:
+        name: rabbitmq-server
+        state: restarted
 
     - name: Show final output
       debug:
