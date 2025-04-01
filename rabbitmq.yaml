@@ -1,0 +1,12 @@
+"#cloud-config
+
+packages:
+  - ansible
+
+runcmd:
+  - cd /usr/local/src/rabbitmq && wget https://raw.githubusercontent.com/anjanahkarthic/rabbitmq/refs/heads/main/rabbitmq.sh
+
+  - chmod +x /usr/local/src/rabbitmq.sh && /usr/local/src/rabbitmq.sh
+  - ansible-playbook /usr/local/src/rabbitmq/installation.yaml -c local
+  - ansible-playbook /usr/local/src/rabbitmq/plugin.yaml -c local
+  - ansible-playbook /usr/local/src/rabbitmq/user.yaml -c local
