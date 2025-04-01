@@ -1,5 +1,5 @@
 ---
-- name: Install OpenSSL and create RabbitMQ user with secure password
+- name: Install RabbitMQ and Create Secure User
   hosts: localhost
   become: true
   vars:
@@ -7,15 +7,24 @@
     password_file: "/tmp/rabbitmq_password.txt"
 
   tasks:
-    - name: Install OpenSSL
+    - name: Install required packages
       apt:
-        name: openssl
+        name:
+          - openssl
+          - rabbitmq-server
         state: present
         update_cache: true
 
+    - name: Ensure RabbitMQ service is running
+      systemd:
+        name: rabbitmq-server
+        state: started
+        enabled: true
+
     - name: Generate secure password using OpenSSL
-      command: "openssl rand -base64 20"
+      shell: "openssl rand -base64 20"
       register: generated_password
+      changed_when: false
 
     - name: Save password to file
       copy:
@@ -24,19 +33,26 @@
           Password: {{ generated_password.stdout }}
         dest: "{{ password_file }}"
         mode: '0600'
+        owner: root
+        group: root
 
-    - name: Create RabbitMQ user
-      command: "rabbitmqctl add_user {{ rabbitmq_user }} '{{ generated_password.stdout }}'"
-      args:
-        creates: "/var/lib/rabbitmq/.rabbitmq_user_{{ rabbitmq_user }}"
+    - name: Check if RabbitMQ user exists
+      command: rabbitmqctl list_users
+      register: rabbitmq_users
+      changed_when: false
+
+    - name: Create RabbitMQ user (if not exists)
+      command: rabbitmqctl add_user "{{ rabbitmq_user }}" "{{ generated_password.stdout }}"
+      when: "'{{ rabbitmq_user }}' not in rabbitmq_users.stdout"
 
     - name: Set permissions for RabbitMQ user
-      command: "rabbitmqctl set_permissions -p / {{ rabbitmq_user }} '.*' '.*' '.*'"
+      command: rabbitmqctl set_permissions -p / "{{ rabbitmq_user }}" ".*" ".*" ".*"
 
     - name: Set user tags (administrator)
-      command: "rabbitmqctl set_user_tags {{ rabbitmq_user }} administrator"
+      command: rabbitmqctl set_user_tags "{{ rabbitmq_user }}" administrator
 
     - name: Mark user creation done (to avoid duplicate execution)
       file:
         path: "/var/lib/rabbitmq/.rabbitmq_user_{{ rabbitmq_user }}"
         state: touch
+        mode: '0600'
