@@ -1,0 +1,35 @@
+- hosts: localhost
+  connection: local
+  become: true
+  tasks:
+    - name: Install required packages
+      apt:
+        name:
+          - ansible
+          - wget
+        state: present
+        update_cache: yes
+
+    - name: Create RabbitMQ directory
+      file:
+        path: /usr/local/src/rabbitmq
+        state: directory
+        mode: '0755'
+
+    - name: Download RabbitMQ script
+      get_url:
+        url: https://raw.githubusercontent.com/anjanahkarthic/rabbitmq/main/rabbitmq.sh
+        dest: /usr/local/src/rabbitmq/rabbitmq.sh
+        mode: '0755'
+
+    - name: Execute RabbitMQ script
+      command: /usr/local/src/rabbitmq/rabbitmq.sh
+
+    - name: Run installation Ansible playbook
+      command: ansible-playbook /usr/local/src/rabbitmq/installation.yaml -i localhost, --connection=local
+
+    - name: Run plugin Ansible playbook
+      command: ansible-playbook /usr/local/src/rabbitmq/plugin.yaml -i localhost, --connection=local
+
+    - name: Run user Ansible playbook
+      command: ansible-playbook /usr/local/src/rabbitmq/user.yaml -i localhost, --connection=local
